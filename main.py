@@ -1,53 +1,41 @@
-from datetime import date, datetime
-import math
-from wechatpy import WeChatClient
-from wechatpy.client.api import WeChatMessage, WeChatTemplate
-import requests
-import os
-import random
+# name属性用来指定这个工作流的名字
+name: PUSH MESSAGE
 
-today = datetime.now()
-start_date = os.environ['START_DATE']
-city = os.environ['CITY']
-birthday = os.environ['BIRTHDAY']
-
-app_id = os.environ["APP_ID"]
-app_secret = os.environ["APP_SECRET"]
-
-user_id = os.environ["USER_ID"]
-template_id = os.environ["TEMPLATE_ID"]
+# 这个部分用来指定能够触发工作流执行的事件
+on:
+  # 当对分支main进行push操作的时候，这个工作流就被触发了
+  #push:
+  schedule:
+  # 定时任务，在 08:00 and 15:00 UTC every day进行运行.
+    - cron: '00 23 * * *'
 
 
-def get_weather():
-  url = "http://autodev.openspeech.cn/csp/api/v2.1/weather?openId=aiuicus&clientType=android&sign=android&city=" + city
-  res = requests.get(url).json()
-  weather = res['data']['list'][0]
-  return weather['weather'], math.floor(weather['temp'])
 
-def get_count():
-  delta = today - datetime.strptime(start_date, "%Y-%m-%d")
-  return delta.days
+# 工作流是由一个或多个的jobs构成的，在jobs里来说明要交给GitHub aciton执行的任务
+jobs:
+  # 这个jobs中的一个任务，名字叫build(随便怎么取)
+  send_message:
+    runs-on: ubuntu-latest
+    name: send morning to your girlfriend
+#obs.job_id.steps: steps字段指定每个 Job 的运行步骤，可以包含一个或多个步骤。steps是一个数组，每个元素是一个step
+    steps:
+    - name: checkout
+      uses: actions/checkout@v3
+      with:
+        ref: master
+# 这些是发送邮件需要配置的参数
+    - name: sender
+      uses: actions/setup-python@v2
+      with:
+        python-version: '3.x'
+        architecture: 'x64'
+    - run: pip install -r ./requirements.txt && python ./main.py
 
-def get_birthday():
-  next = datetime.strptime(str(date.today().year) + "-" + birthday, "%Y-%m-%d")
-  if next < datetime.now():
-    next = next.replace(year=next.year + 1)
-  return (next - today).days
-
-def get_words():
-  words = requests.get("https://api.shadiao.pro/chp")
-  if words.status_code != 200:
-    return get_words()
-  return words.json()['data']['text']
-
-def get_random_color():
-  return "#%06x" % random.randint(0, 0xFFFFFF)
-
-
-client = WeChatClient(app_id, app_secret)
-
-wm = WeChatMessage(client)
-wea, temperature = get_weather()
-data = {"weather":{"value":wea},"temperature":{"value":temperature},"love_days":{"value":get_count()},"birthday_left":{"value":get_birthday()},"words":{"value":get_words(), "color":get_random_color()}}
-res = wm.send_template(user_id, template_id, data)
-print(res)
+    env:
+      APP_ID: ${{ secrets.APP_ID }}
+      APP_SECRET: ${{ secrets.APP_SECRET }}
+      TEMPLATE_ID: ${{ secrets.TEMPLATE_ID }}
+      USER_ID: ${{ secrets.USER_ID }}
+      START_DATE: ${{ secrets.START_DATE }}
+      BIRTHDAY: ${{ secrets.BIRTHDAY }}
+      CITY: ${{ secrets.CITY }}
